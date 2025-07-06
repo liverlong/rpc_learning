@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "github.com/liverlong/rpc-learning/pkg/pb/user";
+
+// 用户信息
+message User {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  int32 age = 4;
+  string phone = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+}
+
+// 创建用户请求
+message CreateUserRequest {
+  string name = 1;
+  string email = 2;
+  int32 age = 3;
+  string phone = 4;
+}
+
+// 创建用户响应
+message CreateUserResponse {
+  User user = 1;
+  string message = 2;
+}
+
+// 获取用户请求
+message GetUserRequest {
+  int64 id = 1;
+}
+
+// 获取用户响应
+message GetUserResponse {
+  User user = 1;
+  string message = 2;
+}
+
+// 更新用户请求
+message UpdateUserRequest {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  int32 age = 4;
+  string phone = 5;
+}
+
+// 更新用户响应
+message UpdateUserResponse {
+  User user = 1;
+  string message = 2;
+}
+
+// 删除用户请求
+message DeleteUserRequest {
+  int64 id = 1;
+}
+
+// 删除用户响应
+message DeleteUserResponse {
+  string message = 1;
+}
+
+// 列出用户请求
+message ListUsersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+// 列出用户响应
+message ListUsersResponse {
+  repeated User users = 1;
+  int32 total = 2;
+  string message = 3;
+}
+
+// 用户服务定义
+service UserService {
+  // 创建用户
+  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+  
+  // 获取用户
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  
+  // 更新用户
+  rpc UpdateUser(UpdateUserRequest) returns (UpdateUserResponse);
+  
+  // 删除用户
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  
+  // 列出用户
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+} 
