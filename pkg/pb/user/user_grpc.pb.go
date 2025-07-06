@@ -24,6 +24,7 @@ const (
 	UserService_UpdateUser_FullMethodName = "/user.UserService/UpdateUser"
 	UserService_DeleteUser_FullMethodName = "/user.UserService/DeleteUser"
 	UserService_ListUsers_FullMethodName  = "/user.UserService/ListUsers"
+	UserService_Chat_FullMethodName       = "/user.UserService/Chat"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -42,6 +43,8 @@ type UserServiceClient interface {
 	DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error)
 	// 列出用户
 	ListUsers(ctx context.Context, in *ListUsersRequest, opts ...grpc.CallOption) (*ListUsersResponse, error)
+	// 双向流聊天
+	Chat(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ChatRequest, ChatResponse], error)
 }
 
 type userServiceClient struct {
@@ -102,6 +105,19 @@ func (c *userServiceClient) ListUsers(ctx context.Context, in *ListUsersRequest,
 	return out, nil
 }
 
+func (c *userServiceClient) Chat(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ChatRequest, ChatResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &UserService_ServiceDesc.Streams[0], UserService_Chat_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ChatRequest, ChatResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type UserService_ChatClient = grpc.BidiStreamingClient[ChatRequest, ChatResponse]
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -118,6 +134,8 @@ type UserServiceServer interface {
 	DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error)
 	// 列出用户
 	ListUsers(context.Context, *ListUsersRequest) (*ListUsersResponse, error)
+	// 双向流聊天
+	Chat(grpc.BidiStreamingServer[ChatRequest, ChatResponse]) error
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -142,6 +160,9 @@ func (UnimplementedUserServiceServer) DeleteUser(context.Context, *DeleteUserReq
 }
 func (UnimplementedUserServiceServer) ListUsers(context.Context, *ListUsersRequest) (*ListUsersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListUsers not implemented")
+}
+func (UnimplementedUserServiceServer) Chat(grpc.BidiStreamingServer[ChatRequest, ChatResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method Chat not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -254,6 +275,13 @@ func _UserService_ListUsers_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_Chat_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(UserServiceServer).Chat(&grpc.GenericServerStream[ChatRequest, ChatResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type UserService_ChatServer = grpc.BidiStreamingServer[ChatRequest, ChatResponse]
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -282,6 +310,13 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_ListUsers_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Chat",
+			Handler:       _UserService_Chat_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "user.proto",
 }

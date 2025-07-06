@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -101,6 +102,22 @@ func main() {
 		for _, user := range users {
 			fmt.Printf("  ID=%d, 姓名=%s, 邮箱=%s, 年龄=%d, 电话=%s\n",
 				user.Id, user.Name, user.Email, user.Age, user.Phone)
+		}
+	}
+
+	// 7. 测试双向流聊天功能
+	fmt.Println("\n7. 测试双向流聊天功能")
+	if user1 != nil {
+		fmt.Printf("用户 %s 正在加入聊天室...\n", user1.Name)
+
+		// 创建一个带超时的上下文
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		// 启动聊天
+		err := userClient.StartChat(ctx, user1.Id, user1.Name)
+		if err != nil {
+			log.Printf("聊天失败: %v", err)
 		}
 	}
 

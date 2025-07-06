@@ -78,6 +78,30 @@ message ListUsersResponse {
   string message = 3;
 }
 
+// 聊天消息
+message ChatMessage {
+  int64 user_id = 1;
+  string username = 2;
+  string content = 3;
+  int64 timestamp = 4;
+  string message_type = 5; // text, join, leave, system
+}
+
+// 聊天请求
+message ChatRequest {
+  int64 user_id = 1;
+  string username = 2;
+  string content = 3;
+  string action = 4; // join, leave, message
+}
+
+// 聊天响应
+message ChatResponse {
+  ChatMessage message = 1;
+  string status = 2;
+  int32 online_users = 3;
+}
+
 // 用户服务定义
 service UserService {
   // 创建用户
@@ -94,4 +118,7 @@ service UserService {
   
   // 列出用户
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  
+  // 双向流聊天
+  rpc Chat(stream ChatRequest) returns (stream ChatResponse);
 } 

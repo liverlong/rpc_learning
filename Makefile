@@ -1,6 +1,6 @@
 # Makefile for gRPC User Service
 
-.PHONY: help proto build run-server run-client clean test deps install-tools
+.PHONY: help proto build run-server run-client run-chat demo-chat clean test deps install-tools
 
 # 默认目标
 help:
@@ -10,6 +10,8 @@ help:
 	@echo "  build         - 构建服务器和客户端"
 	@echo "  run-server    - 运行gRPC服务器"
 	@echo "  run-client    - 运行gRPC客户端"
+	@echo "  run-chat      - 运行聊天客户端 (需要参数: USER_ID=1 USERNAME=张三)"
+	@echo "  demo-chat     - 演示双向流聊天功能"
 	@echo "  test          - 运行测试"
 	@echo "  clean         - 清理构建文件"
 	@echo "  install-tools - 安装开发工具"
@@ -46,6 +48,8 @@ build: proto deps
 	go build -o bin/server cmd/server/main.go
 	@echo "构建客户端..."
 	go build -o bin/client cmd/client/main.go
+	@echo "构建聊天客户端..."
+	go build -o bin/chat cmd/chat/main.go
 
 # 运行服务器
 run-server: build
@@ -56,6 +60,21 @@ run-server: build
 run-client: build
 	@echo "启动gRPC客户端..."
 	./bin/client
+
+# 运行聊天客户端
+run-chat: build
+	@echo "启动聊天客户端..."
+	@if [ -z "$(USER_ID)" ] || [ -z "$(USERNAME)" ]; then \
+		echo "请提供用户ID和用户名:"; \
+		echo "  make run-chat USER_ID=1 USERNAME=张三"; \
+		exit 1; \
+	fi
+	./bin/chat $(USER_ID) $(USERNAME)
+
+# 演示双向流聊天功能
+demo-chat:
+	@echo "启动双向流聊天演示..."
+	@./scripts/demo_chat.sh
 
 # 运行测试
 test:
@@ -94,5 +113,7 @@ all: install-tools proto deps build
 dev-setup: install-tools proto deps
 	@echo "开发环境设置完成!"
 	@echo "现在可以运行以下命令:"
-	@echo "  make run-server  # 启动服务器"
-	@echo "  make run-client  # 启动客户端" 
+	@echo "  make run-server                    # 启动服务器"
+	@echo "  make run-client                    # 启动客户端"
+	@echo "  make run-chat USER_ID=1 USERNAME=张三  # 启动聊天客户端"
+	@echo "  make demo-chat                     # 演示双向流聊天功能" 

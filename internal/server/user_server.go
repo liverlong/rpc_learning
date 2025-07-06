@@ -12,19 +12,29 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ChatClient 聊天客户端信息
+type ChatClient struct {
+	UserID   int64
+	Username string
+	Stream   pb.UserService_ChatServer
+}
+
 // UserServer 用户服务服务器
 type UserServer struct {
 	pb.UnimplementedUserServiceServer
-	users  map[int64]*pb.User
-	nextID int64
-	mu     sync.RWMutex
+	users       map[int64]*pb.User
+	nextID      int64
+	mu          sync.RWMutex
+	chatClients map[int64]*ChatClient
+	chatMu      sync.RWMutex
 }
 
 // NewUserServer 创建新的用户服务服务器
 func NewUserServer() *UserServer {
 	return &UserServer{
-		users:  make(map[int64]*pb.User),
-		nextID: 1,
+		users:       make(map[int64]*pb.User),
+		nextID:      1,
+		chatClients: make(map[int64]*ChatClient),
 	}
 }
 
@@ -209,4 +219,161 @@ func (s *UserServer) ListUsers(ctx context.Context, req *pb.ListUsersRequest) (*
 		Total:   total,
 		Message: fmt.Sprintf("获取用户列表成功，共%d个用户", total),
 	}, nil
+}
+
+// Chat 双向流聊天接口
+func (s *UserServer) Chat(stream pb.UserService_ChatServer) error {
+	log.Printf("Chat stream started")
+
+	var client *ChatClient
+	defer func() {
+		// 清理客户端连接
+		if client != nil {
+			s.chatMu.Lock()
+			delete(s.chatClients, client.UserID)
+			s.chatMu.Unlock()
+
+			// 广播用户离开消息
+			s.broadcastMessage(&pb.ChatMessage{
+				UserId:      client.UserID,
+				Username:    client.Username,
+				Content:     fmt.Sprintf("%s 离开了聊天室", client.Username),
+				Timestamp:   time.Now().Unix(),
+				MessageType: "leave",
+			}, client.UserID)
+		}
+		log.Printf("Chat stream ended")
+	}()
+
+	for {
+		// 接收客户端消息
+		req, err := stream.Recv()
+		if err != nil {
+			log.Printf("Error receiving message: %v", err)
+			return err
+		}
+
+		log.Printf("Received chat request: %+v", req)
+
+		switch req.Action {
+		case "join":
+			// 用户加入聊天室
+			client = &ChatClient{
+				UserID:   req.UserId,
+				Username: req.Username,
+				Stream:   stream,
+			}
+
+			s.chatMu.Lock()
+			s.chatClients[req.UserId] = client
+			onlineUsers := len(s.chatClients)
+			s.chatMu.Unlock()
+
+			// 发送加入确认
+			joinResponse := &pb.ChatResponse{
+				Message: &pb.ChatMessage{
+					UserId:      0,
+					Username:    "系统",
+					Content:     fmt.Sprintf("欢迎 %s 加入聊天室！", req.Username),
+					Timestamp:   time.Now().Unix(),
+					MessageType: "system",
+				},
+				Status:      "joined",
+				OnlineUsers: int32(onlineUsers),
+			}
+
+			if err := stream.Send(joinResponse); err != nil {
+				log.Printf("Error sending join response: %v", err)
+				return err
+			}
+
+			// 广播用户加入消息
+			s.broadcastMessage(&pb.ChatMessage{
+				UserId:      req.UserId,
+				Username:    req.Username,
+				Content:     fmt.Sprintf("%s 加入了聊天室", req.Username),
+				Timestamp:   time.Now().Unix(),
+				MessageType: "join",
+			}, req.UserId)
+
+		case "message":
+			// 处理聊天消息
+			if client == nil {
+				// 用户未加入聊天室
+				errorResponse := &pb.ChatResponse{
+					Message: &pb.ChatMessage{
+						UserId:      0,
+						Username:    "系统",
+						Content:     "请先加入聊天室",
+						Timestamp:   time.Now().Unix(),
+						MessageType: "system",
+					},
+					Status:      "error",
+					OnlineUsers: 0,
+				}
+
+				if err := stream.Send(errorResponse); err != nil {
+					log.Printf("Error sending error response: %v", err)
+					return err
+				}
+				continue
+			}
+
+			// 广播用户消息
+			s.broadcastMessage(&pb.ChatMessage{
+				UserId:      req.UserId,
+				Username:    req.Username,
+				Content:     req.Content,
+				Timestamp:   time.Now().Unix(),
+				MessageType: "text",
+			}, 0) // 0表示广播给所有用户
+
+		case "leave":
+			// 用户主动离开
+			if client != nil {
+				s.chatMu.Lock()
+				delete(s.chatClients, client.UserID)
+				s.chatMu.Unlock()
+
+				// 广播用户离开消息
+				s.broadcastMessage(&pb.ChatMessage{
+					UserId:      client.UserID,
+					Username:    client.Username,
+					Content:     fmt.Sprintf("%s 离开了聊天室", client.Username),
+					Timestamp:   time.Now().Unix(),
+					MessageType: "leave",
+				}, client.UserID)
+
+				client = nil
+			}
+			return nil
+
+		default:
+			log.Printf("Unknown action: %s", req.Action)
+		}
+	}
+}
+
+// broadcastMessage 广播消息给所有在线用户
+func (s *UserServer) broadcastMessage(message *pb.ChatMessage, excludeUserID int64) {
+	s.chatMu.RLock()
+	defer s.chatMu.RUnlock()
+
+	response := &pb.ChatResponse{
+		Message:     message,
+		Status:      "broadcast",
+		OnlineUsers: int32(len(s.chatClients)),
+	}
+
+	for userID, client := range s.chatClients {
+		if excludeUserID != 0 && userID == excludeUserID {
+			continue // 跳过指定用户
+		}
+
+		if err := client.Stream.Send(response); err != nil {
+			log.Printf("Error broadcasting to user %d: %v", userID, err)
+			// 删除断开连接的客户端
+			delete(s.chatClients, userID)
+		}
+	}
 }
